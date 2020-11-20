@@ -13,7 +13,7 @@ import {Cycle, CycleAnalyzer, CycleHandlingStrategy} from '../../cycles';
 import {ErrorCode, FatalDiagnosticError, makeDiagnostic, makeRelatedInformation} from '../../diagnostics';
 import {absoluteFrom, relative} from '../../file_system';
 import {DefaultImportRecorder, ModuleResolver, Reference, ReferenceEmitter} from '../../imports';
-import {DependencyTracker} from '../../incremental/api';
+import {ComponentResolutionRegistry, DependencyTracker} from '../../incremental/api';
 import {IndexingContext} from '../../indexer';
 import {ClassPropertyMapping, ComponentResources, DirectiveMeta, DirectiveTypeCheckMeta, extractDirectiveTypeCheckMeta, InjectableClassRegistry, MetadataReader, MetadataRegistry, Resource, ResourceRegistry} from '../../metadata';
 import {EnumValue, PartialEvaluator, ResolvedValue} from '../../partial_evaluator';
@@ -131,6 +131,7 @@ export class ComponentDecoratorHandler implements
       private defaultImportRecorder: DefaultImportRecorder,
       private depTracker: DependencyTracker|null,
       private injectableRegistry: InjectableClassRegistry,
+      private componentResolutionRegistry: ComponentResolutionRegistry,
       private annotateForClosureCompiler: boolean) {}
 
   private literalCache = new Map<Decorator, ts.ObjectLiteralExpression>();
@@ -538,7 +539,7 @@ export class ComponentDecoratorHandler implements
       const bound = binder.bind({template: metadata.template.nodes});
 
       // The BoundTarget knows which directives and pipes matched the template.
-      type UsedDirective = R3UsedDirectiveMetadata&{ref: Reference};
+      type UsedDirective = R3UsedDirectiveMetadata&{ref: Reference<ClassDeclaration>};
       const usedDirectives: UsedDirective[] = bound.getUsedDirectives().map(directive => {
         return {
           ref: directive.ref,
@@ -551,7 +552,7 @@ export class ComponentDecoratorHandler implements
         };
       });
 
-      type UsedPipe = {ref: Reference, pipeName: string, expression: Expression};
+      type UsedPipe = {ref: Reference<ClassDeclaration>, pipeName: string, expression: Expression};
       const usedPipes: UsedPipe[] = [];
       for (const pipeName of bound.getUsedPipes()) {
         if (!pipes.has(pipeName)) {
@@ -582,7 +583,8 @@ export class ComponentDecoratorHandler implements
         }
       }
 
-      if (cyclesFromDirectives.size === 0 && cyclesFromPipes.size === 0) {
+      const cycleDetected = cyclesFromDirectives.size !== 0 || cyclesFromPipes.size !== 0;
+      if (!cycleDetected) {
         // No cycle was detected. Record the imports that need to be created in the cycle detector
         // so that future cyclic import checks consider their production.
         for (const {type} of usedDirectives) {
@@ -630,6 +632,10 @@ export class ComponentDecoratorHandler implements
               relatedMessages);
         }
       }
+
+      this.componentResolutionRegistry.register(
+          node, usedDirectives.map(dir => dir.ref.node), usedPipes.map(pipe => pipe.ref.node),
+          cycleDetected);
     }
 
     const diagnostics: ts.Diagnostic[] = [];

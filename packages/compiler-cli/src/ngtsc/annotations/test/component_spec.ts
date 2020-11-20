@@ -14,6 +14,7 @@ import {ErrorCode, FatalDiagnosticError} from '../../diagnostics';
 import {absoluteFrom} from '../../file_system';
 import {runInEachFileSystem} from '../../file_system/testing';
 import {ModuleResolver, NOOP_DEFAULT_IMPORT_RECORDER, ReferenceEmitter} from '../../imports';
+import {NOOP_COMPONENT_RESOLUTION_REGISTRY} from '../../incremental/api';
 import {CompoundMetadataReader, DtsMetadataReader, InjectableClassRegistry, LocalMetadataRegistry, ResourceRegistry} from '../../metadata';
 import {PartialEvaluator} from '../../partial_evaluator';
 import {isNamedClassDeclaration, TypeScriptReflectionHost} from '../../reflection';
@@ -78,6 +79,7 @@ function setup(program: ts.Program, options: ts.CompilerOptions, host: ts.Compil
       NOOP_DEFAULT_IMPORT_RECORDER,
       /* depTracker */ null,
       injectableRegistry,
+      NOOP_COMPONENT_RESOLUTION_REGISTRY,
       /* annotateForClosureCompiler */ false,
   );
   return {reflectionHost, handler};

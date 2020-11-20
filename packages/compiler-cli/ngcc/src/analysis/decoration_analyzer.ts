@@ -14,6 +14,7 @@ import {CycleAnalyzer, CycleHandlingStrategy, ImportGraph} from '../../../src/ng
 import {isFatalDiagnosticError} from '../../../src/ngtsc/diagnostics';
 import {absoluteFromSourceFile, LogicalFileSystem, ReadonlyFileSystem} from '../../../src/ngtsc/file_system';
 import {AbsoluteModuleStrategy, LocalIdentifierStrategy, LogicalProjectStrategy, ModuleResolver, NOOP_DEFAULT_IMPORT_RECORDER, PrivateExportAliasingHost, Reexport, ReferenceEmitter} from '../../../src/ngtsc/imports';
+import {NOOP_COMPONENT_RESOLUTION_REGISTRY} from '../../../src/ngtsc/incremental/api';
 import {CompoundMetadataReader, CompoundMetadataRegistry, DtsMetadataReader, InjectableClassRegistry, LocalMetadataRegistry, ResourceRegistry} from '../../../src/ngtsc/metadata';
 import {PartialEvaluator} from '../../../src/ngtsc/partial_evaluator';
 import {LocalModuleScopeRegistry, MetadataDtsModuleScopeResolver, TypeCheckScopeRegistry} from '../../../src/ngtsc/scope';
@@ -102,8 +103,11 @@ export class DecorationAnalyzer {
         /* usePoisonedData */ false,
         /* i18nNormalizeLineEndingsInICUs */ false, this.moduleResolver, this.cycleAnalyzer,
         CycleHandlingStrategy.UseRemoteScoping, this.refEmitter, NOOP_DEFAULT_IMPORT_RECORDER,
-        NOOP_DEPENDENCY_TRACKER, this.injectableRegistry,
+        NOOP_DEPENDENCY_TRACKER,
+        this.injectableRegistry,
+        NOOP_COMPONENT_RESOLUTION_REGISTRY,
         !!this.compilerOptions.annotateForClosureCompiler),
+
     // See the note in ngtsc about why this cast is needed.
     // clang-format off
     new DirectiveDecoratorHandler(
