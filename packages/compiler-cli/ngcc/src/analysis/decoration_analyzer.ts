@@ -103,8 +103,8 @@ export class DecorationAnalyzer {
         /* usePoisonedData */ false,
         /* i18nNormalizeLineEndingsInICUs */ false, this.moduleResolver, this.cycleAnalyzer,
         CycleHandlingStrategy.UseRemoteScoping, this.refEmitter, NOOP_DEFAULT_IMPORT_RECORDER,
-        NOOP_DEPENDENCY_TRACKER, this.injectableRegistry, null,
-        !!this.compilerOptions.annotateForClosureCompiler),
+        NOOP_DEPENDENCY_TRACKER, this.injectableRegistry,
+        /* semanticDepGraphUpdater */ null, !!this.compilerOptions.annotateForClosureCompiler),
 
     // See the note in ngtsc about why this cast is needed.
     // clang-format off

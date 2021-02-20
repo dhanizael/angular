@@ -6,4 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+export {SemanticSymbol} from './src/api';
 export {SemanticDepGraph, SemanticDepGraphUpdater} from './src/graph';
+export {isArrayEqual, isSymbolEqual} from './src/util';

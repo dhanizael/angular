@@ -5,12 +5,11 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-import * as ts from 'typescript';
 
 import {AbsoluteFsPath} from '../../file_system';
 import {ClassDeclaration} from '../../reflection';
 
-import {SemanticSymbol, SymbolResolver} from './api';
+import {SemanticSymbol} from './api';
 
 export interface SemanticDependencyResult {
   /**
@@ -121,10 +120,10 @@ export class SemanticDepGraphUpdater {
   private readonly newGraph = new SemanticDepGraph();
 
   /**
-   * Contains unresolved symbols that were created for declarations for which there was no symbol
+   * Contains opaque symbols that were created for declarations for which there was no symbol
    * registered, which happens for e.g. external declarations.
    */
-  private readonly unresolvedSymbols = new Map<ClassDeclaration, OpaqueSymbol>();
+  private readonly opaqueSymbols = new Map<ClassDeclaration, OpaqueSymbol>();
 
   constructor(
       /**
@@ -194,7 +193,7 @@ export class SemanticDepGraphUpdater {
     const symbol = this.newGraph.getSymbolByDecl(decl);
     if (symbol === null) {
       // No symbol has been recorded for the provided declaration, which would be the case if the
-      // declaration is external. Return an unresolved symbol in that case, to allow the external
+      // declaration is external. Return an opaque symbol in that case, to allow the external
       // declaration to be compared to a prior compilation.
       return this.getOpaqueSymbol(decl);
     }
@@ -205,12 +204,12 @@ export class SemanticDepGraphUpdater {
    * Gets or creates an `OpaqueSymbol` for the provided class declaration.
    */
   private getOpaqueSymbol(decl: ClassDeclaration): OpaqueSymbol {
-    if (this.unresolvedSymbols.has(decl)) {
-      return this.unresolvedSymbols.get(decl)!;
+    if (this.opaqueSymbols.has(decl)) {
+      return this.opaqueSymbols.get(decl)!;
     }
 
     const symbol = new OpaqueSymbol(decl);
-    this.unresolvedSymbols.set(decl, symbol);
+    this.opaqueSymbols.set(decl, symbol);
     return symbol;
   }
 }

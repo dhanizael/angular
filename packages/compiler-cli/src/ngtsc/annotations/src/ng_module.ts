@@ -51,7 +51,7 @@ export interface NgModuleResolution {
  */
 export class NgModuleSymbol extends SemanticSymbol {
   private remotelyScopedComponents:
-      {usedDirectives: SemanticSymbol[], usedPipes: SemanticSymbol[], component: SemanticSymbol}[] =
+      {component: SemanticSymbol, usedDirectives: SemanticSymbol[], usedPipes: SemanticSymbol[]}[] =
           [];
 
   isPublicApiAffected(previousSymbol: SemanticSymbol): boolean {
@@ -79,10 +79,17 @@ export class NgModuleSymbol extends SemanticSymbol {
       });
 
       if (prevEntry === undefined) {
+        // No previous entry was found, which means that this component became remotely scoped and
+        // hence this NgModule needs to be re-emitted.
         return true;
       }
 
       if (!isArrayEqual(currEntry.usedDirectives, prevEntry.usedDirectives, isSymbolEqual)) {
+        // The list of used directives or their order has changed. Since this NgModule emits
+        // references to the list of used directives, it should be re-emitted to update this list.
+        // Note: the NgModule does not have to be re-emitted when any of the directives has had
+        // their public API changed, as the NgModule only emits a reference to the symbol by its
+        // name. Therefore, testing for symbol equality is sufficient.
         return true;
       }
 
@@ -94,8 +101,9 @@ export class NgModuleSymbol extends SemanticSymbol {
   }
 
   addRemotelyScopedComponent(
-      symbol: SemanticSymbol, usedDirectives: SemanticSymbol[], usedPipes: SemanticSymbol[]) {
-    this.remotelyScopedComponents.push({usedDirectives, usedPipes, component: symbol});
+      component: SemanticSymbol, usedDirectives: SemanticSymbol[],
+      usedPipes: SemanticSymbol[]): void {
+    this.remotelyScopedComponents.push({component, usedDirectives, usedPipes});
   }
 }
 

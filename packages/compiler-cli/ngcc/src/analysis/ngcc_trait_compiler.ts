@@ -28,7 +28,7 @@ export class NgccTraitCompiler extends TraitCompiler {
     super(
         handlers, ngccReflector, NOOP_PERF_RECORDER, new NoIncrementalBuild(),
         /* compileNonExportedClasses */ true, CompilationMode.FULL, new DtsTransformRegistry(),
-        null);
+        /* semanticDepGraphUpdater */ null);
   }
 
   get analyzedFiles(): ts.SourceFile[] {

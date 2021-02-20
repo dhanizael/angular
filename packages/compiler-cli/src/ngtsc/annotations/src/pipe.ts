@@ -12,7 +12,7 @@ import * as ts from 'typescript';
 import {ErrorCode, FatalDiagnosticError} from '../../diagnostics';
 import {DefaultImportRecorder, Reference} from '../../imports';
 import {InjectableClassRegistry, MetadataRegistry} from '../../metadata';
-import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {SemanticSymbol} from '../../ngmodule_semantics';
 import {PartialEvaluator} from '../../partial_evaluator';
 import {ClassDeclaration, Decorator, ReflectionHost, reflectObjectLiteral} from '../../reflection';
 import {LocalModuleScopeRegistry} from '../../scope';

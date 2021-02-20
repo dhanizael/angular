@@ -464,11 +464,11 @@ runInEachFileSystem(() => {
              import * as ng from '@angular/core';
 
              export declare class ExternalDir {
-               static ɵdir: ɵɵDirectiveDefWithMeta<ExternalDir, "[external]", never, {}, {}, never>;
+               static ɵdir: ng.ɵɵDirectiveDefWithMeta<ExternalDir, "[external]", never, {}, {}, never>;
              }
 
              export declare class ExternalMod {
-               static ɵmod: ɵɵNgModuleDefWithMeta<ExternalMod, [typeof ExternalDir], never, [typeof ExternalDir]>;
+               static ɵmod: ng.ɵɵNgModuleDefWithMeta<ExternalMod, [typeof ExternalDir], never, [typeof ExternalDir]>;
              }
            `);
            env.write('cmp-a.ts', `
@@ -520,11 +520,11 @@ runInEachFileSystem(() => {
           import * as ng from '@angular/core';
 
           export declare class ExternalDir {
-            static ɵdir: ɵɵDirectiveDefWithMeta<ExternalDir, "[external]", never, {}, {}, never>;
+            static ɵdir: ng.ɵɵDirectiveDefWithMeta<ExternalDir, "[external]", never, {}, {}, never>;
           }
 
           export declare class ExternalMod {
-            static ɵmod: ɵɵNgModuleDefWithMeta<ExternalMod, [typeof ExternalDir], never, [typeof ExternalDir]>;
+            static ɵmod: ng.ɵɵNgModuleDefWithMeta<ExternalMod, [typeof ExternalDir], never, [typeof ExternalDir]>;
           }
         `);
         env.write('cmp-a.ts', `
@@ -995,7 +995,7 @@ runInEachFileSystem(() => {
            env.write('cmp-a-template.html', `<cmp-b><cmp-b>`);
            env.write('cmp-a.ts', `
                import {Component} from '@angular/core';
-  
+
                @Component({
                  selector: 'cmp-a',
                  templateUrl: './cmp-a-template.html',
@@ -1005,7 +1005,7 @@ runInEachFileSystem(() => {
            env.write('cmp-b-template.html', `<cmp-a><cmp-a>`);
            env.write('cmp-b.ts', `
                import {Component} from '@angular/core';
-  
+
                @Component({
                  selector: 'cmp-b',
                  templateUrl: './cmp-b-template.html',
@@ -1017,7 +1017,7 @@ runInEachFileSystem(() => {
                import {MyCmpA} from './cmp-a';
                import {MyCmpB} from './cmp-b';
                import {Dir} from './dir';
-  
+
                @NgModule({
                  declarations: [MyCmpA, MyCmpB, Dir],
                })

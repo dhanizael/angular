@@ -19,7 +19,7 @@ import {IncrementalBuildStrategy, IncrementalDriver} from '../../incremental';
 import {generateAnalysis, IndexedComponent, IndexingContext} from '../../indexer';
 import {ComponentResources, CompoundMetadataReader, CompoundMetadataRegistry, DtsMetadataReader, InjectableClassRegistry, LocalMetadataRegistry, MetadataReader, ResourceRegistry} from '../../metadata';
 import {ModuleWithProvidersScanner} from '../../modulewithproviders';
-import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {SemanticSymbol} from '../../ngmodule_semantics';
 import {PartialEvaluator} from '../../partial_evaluator';
 import {NOOP_PERF_RECORDER, PerfRecorder} from '../../perf';
 import {DeclarationNode, isNamedClassDeclaration, TypeScriptReflectionHost} from '../../reflection';

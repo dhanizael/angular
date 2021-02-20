@@ -16,8 +16,7 @@ import {DefaultImportRecorder, ModuleResolver, Reference, ReferenceEmitter} from
 import {DependencyTracker} from '../../incremental/api';
 import {IndexingContext} from '../../indexer';
 import {ClassPropertyMapping, ComponentResources, DirectiveMeta, DirectiveTypeCheckMeta, extractDirectiveTypeCheckMeta, InjectableClassRegistry, MetadataReader, MetadataRegistry, Resource, ResourceRegistry} from '../../metadata';
-import {SemanticDepGraphUpdater} from '../../ngmodule_semantics';
-import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {SemanticDepGraphUpdater, SemanticSymbol} from '../../ngmodule_semantics';
 import {isArrayEqual, isSymbolEqual} from '../../ngmodule_semantics/src/util';
 import {EnumValue, PartialEvaluator, ResolvedValue} from '../../partial_evaluator';
 import {ClassDeclaration, DeclarationNode, Decorator, ReflectionHost, reflectObjectLiteral} from '../../reflection';
@@ -665,6 +664,9 @@ export class ComponentDecoratorHandler implements
               node, usedDirectives.map(dir => dir.ref), usedPipes.map(pipe => pipe.ref));
           symbol.isRemotelyScoped = true;
 
+          // If a semantic graph is being tracked, record the fact that this component is remotely
+          // scoped with the declaring NgModule symbol as the NgModule's emit becomes dependent on
+          // the directive/pipe usages of this component.
           if (this.semanticDepGraphUpdater !== null) {
             const moduleSymbol = this.semanticDepGraphUpdater.getSymbol(scope.ngModule);
             if (!(moduleSymbol instanceof NgModuleSymbol)) {

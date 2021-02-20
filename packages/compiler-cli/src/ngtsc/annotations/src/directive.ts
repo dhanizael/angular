@@ -15,8 +15,7 @@ import {absoluteFromSourceFile} from '../../file_system';
 import {DefaultImportRecorder, Reference} from '../../imports';
 import {ClassPropertyMapping, DirectiveTypeCheckMeta, InjectableClassRegistry, MetadataReader, MetadataRegistry} from '../../metadata';
 import {extractDirectiveTypeCheckMeta} from '../../metadata/src/util';
-import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
-import {isArrayEqual} from '../../ngmodule_semantics/src/util';
+import {isArrayEqual, SemanticSymbol} from '../../ngmodule_semantics';
 import {DynamicValue, EnumValue, PartialEvaluator} from '../../partial_evaluator';
 import {ClassDeclaration, ClassMember, ClassMemberKind, Decorator, filterToMembersWithDecorator, ReflectionHost, reflectObjectLiteral} from '../../reflection';
 import {LocalModuleScopeRegistry} from '../../scope';
@@ -151,6 +150,12 @@ export class DirectiveDecoratorHandler implements
     };
   }
 
+  symbol(node: ClassDeclaration, analysis: Readonly<DirectiveHandlerData>): DirectiveSymbol {
+    return new DirectiveSymbol(
+        node, analysis.meta.selector, analysis.inputs.propertyNames, analysis.outputs.propertyNames,
+        analysis.meta.exportAs);
+  }
+
   register(node: ClassDeclaration, analysis: Readonly<DirectiveHandlerData>): void {
     // Register this directive's information with the `MetadataRegistry`. This ensures that
     // the information about the directive is available during the compile() phase.
@@ -205,12 +210,6 @@ export class DirectiveDecoratorHandler implements
       resolution: Readonly<unknown>): CompileResult[] {
     const def = compileDeclareDirectiveFromMetadata(analysis.meta);
     return this.compileDirective(analysis, def);
-  }
-
-  symbol(node: ClassDeclaration, analysis: Readonly<DirectiveHandlerData>): DirectiveSymbol {
-    return new DirectiveSymbol(
-        node, analysis.meta.selector, analysis.inputs.propertyNames, analysis.outputs.propertyNames,
-        analysis.meta.exportAs);
   }
 
   private compileDirective(

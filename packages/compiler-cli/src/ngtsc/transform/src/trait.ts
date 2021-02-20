@@ -7,7 +7,7 @@
  */
 
 import * as ts from 'typescript';
-import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {SemanticSymbol} from '../../ngmodule_semantics';
 import {DecoratorHandler, DetectResult} from './api';
 
 export enum TraitState {
