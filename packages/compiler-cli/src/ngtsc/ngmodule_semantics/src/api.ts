@@ -77,8 +77,26 @@ function getSymbolIdentifier(decl: ClassDeclaration): string|null {
     return null;
   }
 
+  if (!hasExportModifier(decl)) {
+    // If the declaration is not itself exported, then it is still possible for the declaration
+    // to be exported elsewhere, possibly using a different exported name. Therefore, we cannot
+    // consider the declaration's own name as its unique identifier.
+    //
+    // For example, renaming the name by which this declaration is exported without renaming the
+    // class declaration itself requires that any references to the declarations must be re-emitted
+    // to use its new exported name. The semantic dependency graph would be unaware of this rename
+    // however, hence non-exported declarations are excluded from semantic tracking by not assigning
+    // them a unique identifier.
+    return null;
+  }
+
   // If this is a top-level class declaration, the class name is used as unique identifier.
   // Other scenarios are currently not supported and causes the symbol not to be identified
   // across rebuilds, unless the declaration node has not changed.
   return decl.name.text;
+}
+
+function hasExportModifier(decl: ClassDeclaration): boolean {
+  return decl.modifiers !== undefined &&
+      decl.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword);
 }
