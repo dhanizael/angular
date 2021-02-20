@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import {ConstantPool} from '@angular/compiler';
+import {SemanticSymbol} from '@angular/compiler-cli/src/ngtsc/ngmodule_semantics/src/api';
 import * as ts from 'typescript';
 
 import {ParsedConfiguration} from '../../..';
@@ -14,7 +15,6 @@ import {CycleAnalyzer, CycleHandlingStrategy, ImportGraph} from '../../../src/ng
 import {isFatalDiagnosticError} from '../../../src/ngtsc/diagnostics';
 import {absoluteFromSourceFile, LogicalFileSystem, ReadonlyFileSystem} from '../../../src/ngtsc/file_system';
 import {AbsoluteModuleStrategy, LocalIdentifierStrategy, LogicalProjectStrategy, ModuleResolver, NOOP_DEFAULT_IMPORT_RECORDER, PrivateExportAliasingHost, Reexport, ReferenceEmitter} from '../../../src/ngtsc/imports';
-import {NOOP_COMPONENT_RESOLUTION_REGISTRY} from '../../../src/ngtsc/incremental/api';
 import {CompoundMetadataReader, CompoundMetadataRegistry, DtsMetadataReader, InjectableClassRegistry, LocalMetadataRegistry, ResourceRegistry} from '../../../src/ngtsc/metadata';
 import {PartialEvaluator} from '../../../src/ngtsc/partial_evaluator';
 import {LocalModuleScopeRegistry, MetadataDtsModuleScopeResolver, TypeCheckScopeRegistry} from '../../../src/ngtsc/scope';
@@ -93,7 +93,7 @@ export class DecorationAnalyzer {
   cycleAnalyzer = new CycleAnalyzer(this.importGraph);
   injectableRegistry = new InjectableClassRegistry(this.reflectionHost);
   typeCheckScopeRegistry = new TypeCheckScopeRegistry(this.scopeRegistry, this.fullMetaReader);
-  handlers: DecoratorHandler<unknown, unknown, unknown>[] = [
+  handlers: DecoratorHandler<unknown, unknown, SemanticSymbol|null, unknown>[] = [
     new ComponentDecoratorHandler(
         this.reflectionHost, this.evaluator, this.fullRegistry, this.fullMetaReader,
         this.scopeRegistry, this.scopeRegistry, this.typeCheckScopeRegistry, new ResourceRegistry(),
@@ -103,9 +103,7 @@ export class DecorationAnalyzer {
         /* usePoisonedData */ false,
         /* i18nNormalizeLineEndingsInICUs */ false, this.moduleResolver, this.cycleAnalyzer,
         CycleHandlingStrategy.UseRemoteScoping, this.refEmitter, NOOP_DEFAULT_IMPORT_RECORDER,
-        NOOP_DEPENDENCY_TRACKER,
-        this.injectableRegistry,
-        NOOP_COMPONENT_RESOLUTION_REGISTRY,
+        NOOP_DEPENDENCY_TRACKER, this.injectableRegistry, null,
         !!this.compilerOptions.annotateForClosureCompiler),
 
     // See the note in ngtsc about why this cast is needed.
@@ -119,7 +117,7 @@ export class DecorationAnalyzer {
         // in ngtsc, but we want to ensure compatibility in ngcc for outdated libraries that
         // have not migrated to explicit decorators. See: https://hackmd.io/@alx/ryfYYuvzH.
         /* compileUndecoratedClassesWithAngularFeatures */ true
-    ) as DecoratorHandler<unknown, unknown, unknown>,
+    ) as DecoratorHandler<unknown, unknown, SemanticSymbol|null,unknown>,
     // clang-format on
     // Pipe handler must be before injectable handler in list so pipe factories are printed
     // before injectable factories (so injectable factories can delegate to them)

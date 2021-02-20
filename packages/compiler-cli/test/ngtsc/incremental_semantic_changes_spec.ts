@@ -14,7 +14,7 @@ import {NgtscTestEnvironment} from './env';
 const testFiles = loadStandardTestFiles();
 
 runInEachFileSystem(() => {
-  fdescribe('ngtsc incremental compilation (semantic changes)', () => {
+  describe('ngtsc incremental compilation (semantic changes)', () => {
     let env!: NgtscTestEnvironment;
 
     beforeEach(() => {
@@ -515,67 +515,315 @@ runInEachFileSystem(() => {
            ]);
          });
 
-      it('should recompile components once an external declaration is changed',
-         () => {
+      it('should recompile components once an external declaration is changed', () => {
+        env.write('node_modules/external/index.d.ts', `
+          import * as ng from '@angular/core';
 
-         });
+          export declare class ExternalDir {
+            static ɵdir: ɵɵDirectiveDefWithMeta<ExternalDir, "[external]", never, {}, {}, never>;
+          }
+
+          export declare class ExternalMod {
+            static ɵmod: ɵɵNgModuleDefWithMeta<ExternalMod, [typeof ExternalDir], never, [typeof ExternalDir]>;
+          }
+        `);
+        env.write('cmp-a.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            template: '<div external></div>',
+          })
+          export class MyCmpA {}
+        `);
+        env.write('cmp-b.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            template: '<div external></div>',
+          })
+          export class MyCmpB {}
+        `);
+        env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {ExternalMod} from 'external';
+          import {MyCmpA} from './cmp-a';
+          import {MyCmpB} from './cmp-b';
+
+          @NgModule({
+            declarations: [MyCmpA, MyCmpB],
+            imports: [ExternalMod],
+          })
+          export class MyMod {}
+        `);
+        env.driveMain();
+        env.flushWrittenFileTracking();
+
+        // Invalidate the external file. Only the referential identity of external symbols matters
+        // for emit reuse, so invalidating this should cause all dependent components to be
+        // re-emitted.
+        env.invalidateCachedFile('node_modules/external/index.d.ts');
+        env.driveMain();
+
+        expectToHaveWritten([
+          // MyMod is written because it has a direct reference to ExternalMod, which was
+          // invalidated.
+          '/mod.js',
+
+          // MyCmpA is written because it uses ExternalDir, which has not changed public API but has
+          // changed identity.
+          '/cmp-a.js',
+
+          // MyCmpB is written because it uses ExternalDir, which has not changed public API but has
+          // changed identity.
+          '/cmp-b.js',
+        ]);
+      });
     });
 
     describe('symbol identity', () => {
-      it('should recompile components that use a directive declared inside a function',
-         () => {
+      it('should recompile components when their exported name changes', () => {
+        env.write('cmp-user.ts', `
+          import {Component} from '@angular/core';
 
-         });
+          @Component({
+            selector: 'cmp-user',
+            template: '<cmp-dep></cmp-dep>',
+          })
+          export class CmpUser {}
+        `);
+        env.write('cmp-dep.ts', `
+          import {Component} from '@angular/core';
 
-      it('should recompile components when their exported name changes',
-         () => {
+          @Component({
+            selector: 'cmp-dep',
+            template: 'Dep',
+          })
+          export class CmpDep {}
+        `);
+        env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {CmpDep} from './cmp-dep';
 
-         });
+          @NgModule({
+            declarations: [CmpUser, CmpDep]
+          })
+          export class Module {}
+        `);
 
-      it('should not recompile components when a directive is changed into a component',
-         () => {
+        env.driveMain();
 
-         });
+        env.write('cmp-dep.ts', `
+          import {Component} from '@angular/core';
 
-      it('should recompile components when a directive is changed into a pipe',
-         () => {
+          @Component({
+            selector: 'cmp-dep',
+            template: 'Dep',
+          })
+          export class CmpDep2 {}
+        `);
+        env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {CmpDep2} from './cmp-dep';
 
-         });
+          @NgModule({
+            declarations: [CmpUser, CmpDep2]
+          })
+          export class Module {}
+        `);
 
-      it('should recompile components when a directive is changed into an NgModule',
-         () => {
+        env.flushWrittenFileTracking();
+        env.driveMain();
 
-         });
+        expectToHaveWritten([
+          // CmpDep and its module were directly updated.
+          '/cmp-dep.js',
+          '/module.js',
 
-      it('should not recompile components when a component is changed into a directive',
-         () => {
+          // CmpUser required a re-emit because the exported name of CmpDep changed.
+          '/cmp-user.js',
+        ]);
+      });
 
-         });
+      it('should not recompile components when a directive is changed into a component', () => {
+        env.write('cmp-user.ts', `
+          import {Component} from '@angular/core';
 
-      it('should recompile components when a component is changed into a pipe',
-         () => {
+          @Component({
+            selector: 'cmp-user',
+            template: '<div dep></div>',
+          })
+          export class CmpUser {}
+        `);
+        env.write('dep.ts', `
+          import {Directive} from '@angular/core';
 
-         });
+          @Directive({
+            selector: '[dep]',
+          })
+          export class Dep {}
+        `);
+        env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {Dep} from './dep';
 
-      it('should recompile components when a component is changed into an NgModule',
-         () => {
+          @NgModule({
+            declarations: [CmpUser, Dep]
+          })
+          export class Module {}
+        `);
 
-         });
+        env.driveMain();
+        env.write('dep.ts', `
+          import {Component} from '@angular/core';
 
-      it('should recompile components when a pipe is changed into a directive',
-         () => {
+          @Component({
+            selector: '[dep]',
+            template: 'Dep',
+          })
+          export class Dep {}
+        `);
 
-         });
+        env.flushWrittenFileTracking();
+        env.driveMain();
 
-      it('should recompile components when a pipe is changed into a component',
-         () => {
+        expectToHaveWritten([
+          // Dep was directly changed.
+          '/dep.js',
 
-         });
+          // Module required a re-emit because its direct dependency (Dep) was changed.
+          '/module.js',
 
-      it('should recompile components when a pipe is changed into an NgModule',
-         () => {
+          // CmpUser did not require a re-emit because its semantic dependencies were not affected.
+          // Dep is still matched and still has the same public API.
+        ]);
+      });
 
-         });
+      it('should recompile components when a directive and pipe are swapped', () => {
+        env.write('cmp-user.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'cmp-user',
+            template: '<dep>{{1 | dep}}</dep>',
+          })
+          export class CmpUser {}
+        `);
+        env.write('dep.ts', `
+          import {Directive, Pipe} from '@angular/core';
+
+          @Directive({
+            selector: 'dep',
+          })
+          export class DepA {}
+
+          @Pipe({
+            name: 'dep',
+          })
+          export class DepB {}
+        `);
+        env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {DepA, DepB} from './dep';
+
+          @NgModule({
+            declarations: [CmpUser, DepA, DepB],
+          })
+          export class Module {}
+        `);
+
+        env.driveMain();
+
+        // The annotations on DepA and DepB are swapped. This ensures that when we're comparing the
+        // public API of these symbols to the prior program, the prior symbols are of a different
+        // type (pipe vs directive) than the new symbols, which should lead to a re-emit.
+        env.write('dep.ts', `
+          import {Directive, Pipe} from '@angular/core';
+
+          @Pipe({
+            name: 'dep',
+          })
+          export class DepA {}
+
+          @Directive({
+            selector: 'dep',
+          })
+          export class DepB {}
+        `);
+
+        env.flushWrittenFileTracking();
+        env.driveMain();
+
+        expectToHaveWritten([
+          // Dep was directly changed.
+          '/dep.js',
+
+          // Module required a re-emit because its direct dependency (Dep) was changed.
+          '/module.js',
+
+          // CmpUser required a re-emit because the shape of its matched symbols changed.
+          '/cmp-user.js',
+        ]);
+      });
+
+      it('should not recompile components when a component is changed into a directive', () => {
+        env.write('cmp-user.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'cmp-user',
+            template: '<div dep></div>',
+          })
+          export class CmpUser {}
+        `);
+        env.write('dep.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: '[dep]',
+            template: 'Dep',
+          })
+          export class Dep {}
+        `);
+        env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {Dep} from './dep';
+
+          @NgModule({
+            declarations: [CmpUser, Dep]
+          })
+          export class Module {}
+        `);
+
+        env.driveMain();
+
+        env.write('dep.ts', `
+          import {Directive} from '@angular/core';
+
+          @Directive({
+            selector: '[dep]',
+          })
+          export class Dep {}
+        `);
+
+        env.flushWrittenFileTracking();
+        env.driveMain();
+
+        expectToHaveWritten([
+          // Dep was directly changed.
+          '/dep.js',
+
+          // Module required a re-emit because its direct dependency (Dep) was changed.
+          '/module.js',
+
+          // CmpUser did not require a re-emit because its semantic dependencies were not affected.
+          // Dep is still matched and still has the same public API.
+        ]);
+      });
     });
 
     describe('remote scoping', () => {
@@ -616,10 +864,11 @@ runInEachFileSystem(() => {
         env.write('cmp-b-template.html', `<cmp-a>Update</cmp-a>`);
         env.driveMain();
         expectToHaveWritten([
-          // MyCmpB is written because it was updated.
+          // MyCmpB is written because its template was updated.
           '/cmp-b.js',
 
-          // MyCmpA and MyMod should not be written because they are not affected.
+          // MyCmpA should not be written because MyCmpB's public API didn't change.
+          // MyMod should not be written because remote scoping didn't change.
         ]);
       });
 
@@ -660,15 +909,22 @@ runInEachFileSystem(() => {
         env.write('cmp-a-template.html', `<cmp-b><cmp-b>`);
         env.driveMain();
         expectToHaveWritten([
-          // MyMod is written because it needs remote scoping.
+          // MyMod is written because its remote scopes have changed.
           '/mod.js',
 
-          // MyCmpA is written because it was updated.
+          // MyCmpA is written because its template was updated.
           '/cmp-a.js',
 
-          // MyCmpB is written because it needs remote scoping.
+          // MyCmpB is written because it now requires remote scoping, where previously it did not.
           '/cmp-b.js',
         ]);
+
+        // Validate the correctness of the assumptions made above:
+        // * CmpA should not be using remote scoping.
+        // * CmpB should be using remote scoping.
+        const moduleJs = env.getContents('mod.js');
+        expect(moduleJs).not.toContain('setComponentScope(MyCmpA,');
+        expect(moduleJs).toContain('setComponentScope(MyCmpB,');
       });
 
       it('should recompile an NgModule and component when an import cycle is removed', () => {
@@ -703,60 +959,623 @@ runInEachFileSystem(() => {
              export class MyMod {}
            `);
         env.driveMain();
-        env.flushWrittenFileTracking();
 
+        // Validate the correctness of the assumption that CmpB will be the remotely scoped
+        // component due to the above cycle:
+        const moduleJs = env.getContents('mod.js');
+        expect(moduleJs).not.toContain('setComponentScope(MyCmpA,');
+        expect(moduleJs).toContain('setComponentScope(MyCmpB,');
+
+        env.flushWrittenFileTracking();
         env.write('cmp-a-template.html', ``);
+
         env.driveMain();
         expectToHaveWritten([
-          // MyMod is written because it no longer needs remote scoping.
+          // MyMod is written because its remote scopes have changed.
           '/mod.js',
 
-          // MyCmpA is written because it was updated.
+          // MyCmpA is written because its template was updated.
           '/cmp-a.js',
 
           // MyCmpB is written because it no longer needs remote scoping.
           '/cmp-b.js',
         ]);
       });
+
+      it('should recompile an NgModule when a remotely scoped component\'s scope is changed',
+         () => {
+           env.write('dir.ts', `
+               import {Directive} from '@angular/core';
+
+               @Directive({
+                 selector: '[dir]',
+               })
+               export class Dir {}
+           `);
+           env.write('cmp-a-template.html', `<cmp-b><cmp-b>`);
+           env.write('cmp-a.ts', `
+               import {Component} from '@angular/core';
+  
+               @Component({
+                 selector: 'cmp-a',
+                 templateUrl: './cmp-a-template.html',
+               })
+               export class MyCmpA {}
+             `);
+           env.write('cmp-b-template.html', `<cmp-a><cmp-a>`);
+           env.write('cmp-b.ts', `
+               import {Component} from '@angular/core';
+  
+               @Component({
+                 selector: 'cmp-b',
+                 templateUrl: './cmp-b-template.html',
+               })
+               export class MyCmpB {}
+             `);
+           env.write('mod.ts', `
+               import {NgModule} from '@angular/core';
+               import {MyCmpA} from './cmp-a';
+               import {MyCmpB} from './cmp-b';
+               import {Dir} from './dir';
+  
+               @NgModule({
+                 declarations: [MyCmpA, MyCmpB, Dir],
+               })
+               export class MyMod {}
+             `);
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+           // Validate the correctness of the assumption that MyCmpB will be remotely scoped:
+           const moduleJs = env.getContents('mod.js');
+           expect(moduleJs).not.toContain('setComponentScope(MyCmpA,');
+           expect(moduleJs).toContain('setComponentScope(MyCmpB,');
+
+           env.write('cmp-b-template.html', `<cmp-a dir>Update</cmp-a>`);
+
+           env.driveMain();
+
+           expectToHaveWritten([
+             // MyCmpB is written because its template was updated.
+             '/cmp-b.js',
+
+             // MyMod should be written because one of its remotely scoped components has a changed
+             // scope.
+             '/mod.js'
+
+             // MyCmpA should not be written because none of its dependencies have changed in their
+             // public API.
+           ]);
+         });
+
+
+      it('should recompile an NgModule when a remotely scoped component\'s scope is changed',
+         () => {
+           env.write('cmp-a-template.html', `<cmp-b><cmp-b> <cmp-c></cmp-c>`);
+           env.write('cmp-a.ts', `
+           import {Component} from '@angular/core';
+
+           @Component({
+             selector: 'cmp-a',
+             templateUrl: './cmp-a-template.html',
+           })
+           export class MyCmpA {}
+         `);
+           env.write('cmp-b-template.html', `<cmp-a><cmp-a>`);
+           env.write('cmp-b.ts', `
+           import {Component} from '@angular/core';
+
+           @Component({
+             selector: 'cmp-b',
+             templateUrl: './cmp-b-template.html',
+           })
+           export class MyCmpB {}
+         `);
+
+           env.write('cmp-c-template.html', ``);
+           env.write('cmp-c.ts', `
+        import {Component} from '@angular/core';
+
+        @Component({
+          selector: 'cmp-c',
+          templateUrl: './cmp-c-template.html',
+        })
+        export class MyCmpC {}
+      `);
+           env.write('mod.ts', `
+           import {NgModule} from '@angular/core';
+           import {MyCmpA} from './cmp-a';
+           import {MyCmpB} from './cmp-b';
+           import {MyCmpC} from './cmp-c';
+
+           @NgModule({
+             declarations: [MyCmpA, MyCmpB, MyCmpC],
+           })
+           export class MyMod {}
+         `);
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+           // Validate the correctness of the assumption that MyCmpB will be the only remotely
+           // scoped component due to the MyCmpA <-> MyCmpB cycle:
+           const moduleJsBefore = env.getContents('mod.js');
+           expect(moduleJsBefore).not.toContain('setComponentScope(MyCmpA,');
+           expect(moduleJsBefore).toContain('setComponentScope(MyCmpB,');
+           expect(moduleJsBefore).not.toContain('setComponentScope(MyCmpC,');
+
+           env.write('cmp-c-template.html', `<cmp-a>Update</cmp-a>`);
+           env.driveMain();
+
+           // Validate the correctness of the assumption that MyCmpB and MyCmpC are now both
+           // remotely scoped due to the MyCmpA <-> MyCmpB and MyCmpA <-> MyCmpC cycles:
+           const moduleJsAfter = env.getContents('mod.js');
+           expect(moduleJsAfter).not.toContain('setComponentScope(MyCmpA,');
+           expect(moduleJsAfter).toContain('setComponentScope(MyCmpB,');
+           expect(moduleJsAfter).toContain('setComponentScope(MyCmpC,');
+
+           expectToHaveWritten([
+             // MyCmpC is written because its template was updated.
+             '/cmp-c.js',
+
+             // MyMod should be written because MyCmpC became remotely scoped
+             '/mod.js'
+
+             // MyCmpA and MyCmpB should not be written because none of their dependencies have
+             // changed in their public API.
+           ]);
+         });
     });
 
     describe('NgModule declarations', () => {
       it('should recompile components when a matching directive is added in the direct scope',
          () => {
+           env.write('dir.ts', `
+             import {Directive} from '@angular/core';
 
+             @Directive({
+               selector: '[dir]',
+             })
+             export class Dir {}
+           `);
+
+           env.write('cmp.ts', `
+             import {Component} from '@angular/core';
+
+             @Component({
+               selector: 'test-cmp',
+               template: '<div dir></div>',
+             })
+             export class Cmp {}
+           `);
+
+           env.write('mod.ts', `
+             import {NgModule} from '@angular/core';
+             import {Cmp} from './cmp';
+
+             @NgModule({
+               declarations: [Cmp],
+             })
+             export class Mod {}
+           `);
+
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+           env.write('mod.ts', `
+             import {NgModule} from '@angular/core';
+             import {Cmp} from './cmp';
+             import {Dir} from './dir';
+
+             @NgModule({
+               declarations: [Cmp, Dir],
+             })
+             export class Mod {}
+           `);
+
+           env.driveMain();
+           expectToHaveWritten([
+             // Mod is written as it was directly changed.
+             '/mod.js',
+
+             // Cmp is written as a matching directive was added to Mod's scope.
+             '/cmp.js',
+           ]);
          });
 
       it('should recompile components when a matching directive is removed from the direct scope',
          () => {
+           env.write('dir.ts', `
+          import {Directive} from '@angular/core';
 
+          @Directive({
+            selector: '[dir]',
+          })
+          export class Dir {}
+        `);
+
+           env.write('cmp.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template: '<div dir></div>',
+          })
+          export class Cmp {}
+        `);
+
+           env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+          import {Dir} from './dir';
+
+          @NgModule({
+            declarations: [Cmp, Dir],
+          })
+          export class Mod {}
+        `);
+
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+           env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+
+          @NgModule({
+            declarations: [Cmp],
+          })
+          export class Mod {}
+        `);
+
+           env.driveMain();
+           expectToHaveWritten([
+             // Mod is written as it was directly changed.
+             '/mod.js',
+
+             // Cmp is written as a matching directive was removed from Mod's scope.
+             '/cmp.js',
+           ]);
          });
 
       it('should recompile components when a matching directive is added in the transitive scope',
          () => {
+           env.write('dir.ts', `
+          import {Directive} from '@angular/core';
 
+          @Directive({
+            selector: '[dir]',
+          })
+          export class Dir {}
+        `);
+
+           env.write('cmp.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template: '<div dir></div>',
+          })
+          export class Cmp {}
+        `);
+
+           env.write('deep.ts', `
+          import {NgModule} from '@angular/core';
+
+          @NgModule({
+            declarations: [],
+            exports: [],
+          })
+          export class Deep {}
+        `);
+
+           env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+          import {Deep} from './deep';
+
+          @NgModule({
+            declarations: [Cmp],
+            imports: [Deep],
+          })
+          export class Mod {}
+        `);
+
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+
+           env.write('deep.ts', `
+          import {NgModule} from '@angular/core';
+          import {Dir} from './dir';
+
+          @NgModule({
+            declarations: [Dir],
+            exports: [Dir],
+          })
+          export class Deep {}
+        `);
+
+           env.driveMain();
+           expectToHaveWritten([
+             // Mod is written as it was directly changed.
+             '/deep.js',
+
+             // Mod is written as its direct dependency (Deep) was changed.
+             '/mod.js',
+
+             // Cmp is written as a matching directive was added to Mod's transitive scope.
+             '/cmp.js',
+           ]);
          });
 
       it('should recompile components when a matching directive is removed from the transitive scope',
          () => {
+           env.write('dir.ts', `
+          import {Directive} from '@angular/core';
 
+          @Directive({
+            selector: '[dir]',
+          })
+          export class Dir {}
+        `);
+
+           env.write('cmp.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template: '<div dir></div>',
+          })
+          export class Cmp {}
+        `);
+
+           env.write('deep.ts', `
+       import {NgModule} from '@angular/core';
+       import {Dir} from './dir';
+
+       @NgModule({
+         declarations: [Dir],
+         exports: [Dir],
+       })
+       export class Deep {}
+     `);
+
+           env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+          import {Deep} from './deep';
+
+          @NgModule({
+            declarations: [Cmp],
+            imports: [Deep],
+          })
+          export class Mod {}
+        `);
+
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+           env.write('deep.ts', `
+          import {NgModule} from '@angular/core';
+
+          @NgModule({
+            declarations: [],
+            exports: [],
+          })
+          export class Deep {}
+        `);
+
+           env.driveMain();
+           expectToHaveWritten([
+             // Mod is written as it was directly changed.
+             '/deep.js',
+
+             // Mod is written as its direct dependency (Deep) was changed.
+             '/mod.js',
+
+             // Cmp is written as a matching directive was removed from Mod's transitive scope.
+             '/cmp.js',
+           ]);
          });
 
-      it('should not recompile components when a mismatched directive is added in scope',
+      it('should not recompile components when a non-matching directive is added in scope', () => {
+        env.write('dir.ts', `
+          import {Directive} from '@angular/core';
+
+          @Directive({
+            selector: '[dir]',
+          })
+          export class Dir {}
+        `);
+
+        env.write('cmp.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'test-cmp',
+            template: '<div></div>',
+          })
+          export class Cmp {}
+        `);
+
+        env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+
+          @NgModule({
+            declarations: [Cmp],
+          })
+          export class Mod {}
+        `);
+
+        env.driveMain();
+        env.flushWrittenFileTracking();
+
+        env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+          import {Dir} from './dir';
+
+          @NgModule({
+            declarations: [Cmp, Dir],
+          })
+          export class Mod {}
+        `);
+
+        env.driveMain();
+        expectToHaveWritten([
+          // Mod is written as it was directly changed.
+          '/mod.js',
+
+          // Cmp is not written as its used directives remains the same, since Dir does not match
+          // within its template.
+        ]);
+      });
+    });
+
+    describe('error recovery', () => {
+      it('should recompile a component when a matching directive is added that first contains an error',
          () => {
+           env.write('cmp.ts', `
+          import {Component} from '@angular/core';
 
-         });
+          @Component({
+            selector: 'test-cmp',
+            template: '<div dir></div>',
+          })
+          export class Cmp {}
+        `);
 
-      it('should not recompile components when a matching directive is added outside scope',
-         () => {
+           env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
 
+          @NgModule({
+            declarations: [Cmp],
+          })
+          export class Mod {}
+        `);
+
+           env.driveMain();
+           env.flushWrittenFileTracking();
+
+           env.write('mod.ts', `
+          import {NgModule} from '@angular/core';
+          import {Cmp} from './cmp';
+          import {Dir} from './dir';
+
+          @NgModule({
+            declarations: [Cmp, Dir],
+          })
+          export class Mod {}
+        `);
+
+           expect(env.driveDiagnostics().length).not.toBe(0);
+
+           env.write('dir.ts', `
+          import {Directive} from '@angular/core';
+
+          @Directive({
+            selector: '[dir]',
+          })
+          export class Dir {}
+        `);
+
+           env.flushWrittenFileTracking();
+           env.driveMain();
+
+           expectToHaveWritten([
+             // Mod is written as it was changed in the first incremental compilation, but had
+             // errors and so was not written then.
+             '/mod.js',
+
+             // Dir is written as it was added in the second incremental compilation.
+             '/dir.js',
+
+             // Cmp is written as the cumulative effect of the two changes was to add Dir to its
+             // scope and thus match in Cmp's template.
+             '/cmp.js',
+           ]);
          });
     });
 
-    describe(
-        'error recovery',
-        () => {
-            // ...
-        });
+    it('should correctly emit components when public API changes during a broken program', () => {
+      env.write('other.ts', `
+        export const FOO = true;
+      `);
+      env.write('dir.ts', `
+        import {Directive, Input} from '@angular/core';
+
+        @Directive({
+          selector: '[dir]',
+        })
+        export class Dir {
+          @Input()
+          dirIn!: string;
+        }
+      `);
+      env.write('cmp.ts', `
+        import {Component} from '@angular/core';
+        import './other';
+
+        @Component({
+          selector: 'test-cmp',
+          template: '<div dir></div>',
+        })
+        export class Cmp {}
+      `);
+
+      env.write('mod.ts', `
+        import {NgModule} from '@angular/core';
+        import {Cmp} from './cmp';
+        import {Dir} from './dir';
+
+        @NgModule({
+          declarations: [Cmp, Dir],
+        })
+        export class Mod {}
+      `);
+
+      env.driveMain();
+
+      env.flushWrittenFileTracking();
+      env.write('dir.ts', `
+      import {Directive, Input} from '@angular/core';
+
+      @Directive({
+        selector: '[dir]',
+      })
+      export class Dir {
+        @Input()
+        dirIn_changed!: string;
+      }
+    `);
+
+      env.write('other.ts', `
+        export const FOO = ;
+      `);
+      expect(env.driveDiagnostics().length).not.toBe(0);
+
+      env.flushWrittenFileTracking();
+      env.write('other.ts', `
+        export const FOO = false;
+      `);
+
+      env.driveMain();
+      expectToHaveWritten([
+        // Mod is written as its direct dependency (Dir) was changed.
+        '/mod.js',
+
+        // Dir is written as it was directly changed.
+        '/dir.js',
+
+        // other.js is written as it was directly changed.
+        '/other.js',
+
+        // Cmp is written as Dir's public API has changed.
+        '/cmp.js',
+      ]);
+    });
   });
 });
 

@@ -11,6 +11,7 @@ import * as ts from 'typescript';
 
 import {Reexport} from '../../imports';
 import {IndexingContext} from '../../indexer';
+import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
 import {ClassDeclaration, Decorator} from '../../reflection';
 import {ImportManager} from '../../translator';
 import {TypeCheckContext} from '../../typecheck/api';
@@ -87,7 +88,7 @@ export enum HandlerFlags {
  * @param `A` The type of analysis metadata produced by `analyze`.
  * @param `R` The type of resolution metadata produced by `resolve`.
  */
-export interface DecoratorHandler<D, A, R> {
+export interface DecoratorHandler<D, A, S extends SemanticSymbol|null, R> {
   readonly name: string;
 
   /**
@@ -159,7 +160,7 @@ export interface DecoratorHandler<D, A, R> {
    * `DecoratorHandler` a chance to leverage information from the whole compilation unit to enhance
    * the `analysis` before the emit phase.
    */
-  resolve?(node: ClassDeclaration, analysis: Readonly<A>): ResolveResult<R>;
+  resolve?(node: ClassDeclaration, analysis: Readonly<A>, symbol: S): ResolveResult<R>;
 
   typeCheck?
       (ctx: TypeCheckContext, node: ClassDeclaration, analysis: Readonly<A>,
@@ -187,6 +188,11 @@ export interface DecoratorHandler<D, A, R> {
   compilePartial?
       (node: ClassDeclaration, analysis: Readonly<A>, resolution: Readonly<R>): CompileResult
       |CompileResult[];
+
+  /**
+   * TODO(zarend): documentation
+   */
+  symbol(node: ClassDeclaration, analysis: Readonly<A>): S;
 }
 
 /**

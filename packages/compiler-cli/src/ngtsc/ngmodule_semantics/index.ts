@@ -7,4 +7,3 @@
  */
 
 export {SemanticDepGraph, SemanticDepGraphUpdater} from './src/graph';
-export {SemanticDepGraphAdapter} from './src/metadata';

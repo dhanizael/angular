@@ -12,8 +12,10 @@ import * as ts from 'typescript';
 import {ErrorCode, FatalDiagnosticError, makeDiagnostic, makeRelatedInformation} from '../../diagnostics';
 import {DefaultImportRecorder, Reference, ReferenceEmitter} from '../../imports';
 import {InjectableClassRegistry, MetadataReader, MetadataRegistry} from '../../metadata';
+import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {isArrayEqual, isSymbolEqual} from '../../ngmodule_semantics/src/util';
 import {PartialEvaluator, ResolvedValue} from '../../partial_evaluator';
-import {ClassDeclaration, DeclarationNode, Decorator, isNamedClassDeclaration, ReflectionHost, reflectObjectLiteral, typeNodeToValueExpr} from '../../reflection';
+import {ClassDeclaration, Decorator, isNamedClassDeclaration, ReflectionHost, reflectObjectLiteral, typeNodeToValueExpr} from '../../reflection';
 import {NgModuleRouteAnalyzer} from '../../routing';
 import {LocalModuleScopeRegistry, ScopeData} from '../../scope';
 import {FactoryTracker} from '../../shims/api';
@@ -45,12 +47,65 @@ export interface NgModuleResolution {
 }
 
 /**
+ * Represents an Angular NgModule.
+ */
+export class NgModuleSymbol extends SemanticSymbol {
+  private remotelyScopedComponents:
+      {usedDirectives: SemanticSymbol[], usedPipes: SemanticSymbol[], component: SemanticSymbol}[] =
+          [];
+
+  isPublicApiAffected(previousSymbol: SemanticSymbol): boolean {
+    if (!(previousSymbol instanceof NgModuleSymbol)) {
+      return true;
+    }
+
+    // NgModules don't have a public API that could affect emit of Angular decorated classes.
+    return false;
+  }
+
+  isEmitAffected(previousSymbol: SemanticSymbol): boolean {
+    if (!(previousSymbol instanceof NgModuleSymbol)) {
+      return true;
+    }
+
+    // compare our remotelyScopedComponents to the previous symbol
+    if (previousSymbol.remotelyScopedComponents.length !== this.remotelyScopedComponents.length) {
+      return true;
+    }
+
+    for (const currEntry of this.remotelyScopedComponents) {
+      const prevEntry = previousSymbol.remotelyScopedComponents.find(prevEntry => {
+        return isSymbolEqual(prevEntry.component, currEntry.component);
+      });
+
+      if (prevEntry === undefined) {
+        return true;
+      }
+
+      if (!isArrayEqual(currEntry.usedDirectives, prevEntry.usedDirectives, isSymbolEqual)) {
+        return true;
+      }
+
+      if (!isArrayEqual(currEntry.usedPipes, prevEntry.usedPipes, isSymbolEqual)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  addRemotelyScopedComponent(
+      symbol: SemanticSymbol, usedDirectives: SemanticSymbol[], usedPipes: SemanticSymbol[]) {
+    this.remotelyScopedComponents.push({usedDirectives, usedPipes, component: symbol});
+  }
+}
+
+/**
  * Compiles @NgModule annotations to ngModuleDef fields.
  *
  * TODO(alxhub): handle injector side of things as well.
  */
 export class NgModuleDecoratorHandler implements
-    DecoratorHandler<Decorator, NgModuleAnalysis, NgModuleResolution> {
+    DecoratorHandler<Decorator, NgModuleAnalysis, NgModuleSymbol, NgModuleResolution> {
   constructor(
       private reflector: ReflectionHost, private evaluator: PartialEvaluator,
       private metaReader: MetadataReader, private metaRegistry: MetadataRegistry,
@@ -291,6 +346,10 @@ export class NgModuleDecoratorHandler implements
         factorySymbolName: node.name.text,
       },
     };
+  }
+
+  symbol(node: ClassDeclaration): NgModuleSymbol {
+    return new NgModuleSymbol(node);
   }
 
   register(node: ClassDeclaration, analysis: NgModuleAnalysis): void {

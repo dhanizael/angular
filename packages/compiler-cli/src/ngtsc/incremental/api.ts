@@ -8,7 +8,6 @@
 
 import * as ts from 'typescript';
 import {AbsoluteFsPath} from '../file_system';
-import {ClassDeclaration, DeclarationNode} from '../reflection';
 
 /**
  * Interface of the incremental build engine.
@@ -58,29 +57,3 @@ export interface DependencyTracker<T extends {fileName: string} = ts.SourceFile>
    */
   recordDependencyAnalysisFailure(file: T): void;
 }
-
-/**
- * Captures the resolution data of components to be able determine if a component's emit is
- * affected by the changes that were made in an incremental rebuild.
- */
-export interface ComponentResolutionRegistry {
-  /**
-   * Registers a component's usages in the registry.
-   *
-   * @param component The component declaration to register.
-   * @param usedDirectives The declarations of the directives that are used by the component.
-   * @param usedPipes The declarations of the pipes that are used by the component.
-   * @param isRemotelyScoped Whether the component requires remote scoping.
-   */
-  register(
-      component: ClassDeclaration, usedDirectives: ClassDeclaration[],
-      usedPipes: ClassDeclaration[], isRemotelyScoped: boolean): void;
-}
-
-/**
- * A `ComponentResolutionRegistry` that does nothing, to be used when the information that is being
- * registered is not used.
- */
-export const NOOP_COMPONENT_RESOLUTION_REGISTRY: ComponentResolutionRegistry = {
-  register() {}
-};

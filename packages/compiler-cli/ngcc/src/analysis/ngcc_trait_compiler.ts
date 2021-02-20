@@ -5,6 +5,7 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
+import {SemanticSymbol} from '@angular/compiler-cli/src/ngtsc/ngmodule_semantics/src/api';
 import * as ts from 'typescript';
 
 import {IncrementalBuild} from '../../../src/ngtsc/incremental/api';
@@ -22,11 +23,12 @@ import {isDefined} from '../utils';
  */
 export class NgccTraitCompiler extends TraitCompiler {
   constructor(
-      handlers: DecoratorHandler<unknown, unknown, unknown>[],
+      handlers: DecoratorHandler<unknown, unknown, SemanticSymbol|null, unknown>[],
       private ngccReflector: NgccReflectionHost) {
     super(
         handlers, ngccReflector, NOOP_PERF_RECORDER, new NoIncrementalBuild(),
-        /* compileNonExportedClasses */ true, CompilationMode.FULL, new DtsTransformRegistry());
+        /* compileNonExportedClasses */ true, CompilationMode.FULL, new DtsTransformRegistry(),
+        null);
   }
 
   get analyzedFiles(): ts.SourceFile[] {
@@ -54,7 +56,7 @@ export class NgccTraitCompiler extends TraitCompiler {
    * @param flags optional bitwise flag to influence the compilation of the decorator.
    */
   injectSyntheticDecorator(clazz: ClassDeclaration, decorator: Decorator, flags?: HandlerFlags):
-      Trait<unknown, unknown, unknown>[] {
+      Trait<unknown, unknown, SemanticSymbol|null, unknown>[] {
     const migratedTraits = this.detectTraits(clazz, [decorator]);
     if (migratedTraits === null) {
       return [];

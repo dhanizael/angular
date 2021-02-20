@@ -13,9 +13,12 @@ import {Cycle, CycleAnalyzer, CycleHandlingStrategy} from '../../cycles';
 import {ErrorCode, FatalDiagnosticError, makeDiagnostic, makeRelatedInformation} from '../../diagnostics';
 import {absoluteFrom, relative} from '../../file_system';
 import {DefaultImportRecorder, ModuleResolver, Reference, ReferenceEmitter} from '../../imports';
-import {ComponentResolutionRegistry, DependencyTracker} from '../../incremental/api';
+import {DependencyTracker} from '../../incremental/api';
 import {IndexingContext} from '../../indexer';
 import {ClassPropertyMapping, ComponentResources, DirectiveMeta, DirectiveTypeCheckMeta, extractDirectiveTypeCheckMeta, InjectableClassRegistry, MetadataReader, MetadataRegistry, Resource, ResourceRegistry} from '../../metadata';
+import {SemanticDepGraphUpdater} from '../../ngmodule_semantics';
+import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {isArrayEqual, isSymbolEqual} from '../../ngmodule_semantics/src/util';
 import {EnumValue, PartialEvaluator, ResolvedValue} from '../../partial_evaluator';
 import {ClassDeclaration, DeclarationNode, Decorator, ReflectionHost, reflectObjectLiteral} from '../../reflection';
 import {ComponentScopeReader, LocalModuleScopeRegistry, TypeCheckScopeRegistry} from '../../scope';
@@ -26,9 +29,10 @@ import {SubsetOfKeys} from '../../util/src/typescript';
 
 import {ResourceLoader} from './api';
 import {createValueHasWrongTypeError, getDirectiveDiagnostics, getProviderDiagnostics} from './diagnostics';
-import {extractDirectiveMetadata, parseFieldArrayValue} from './directive';
+import {DirectiveSymbol, extractDirectiveMetadata, parseFieldArrayValue} from './directive';
 import {compileNgFactoryDefField} from './factory';
 import {generateSetClassMetadataCall} from './metadata';
+import {NgModuleSymbol} from './ng_module';
 import {findAngularDecorator, isAngularCoreReference, isExpressionForwardReference, readBaseClass, resolveProvidersRequiringFactory, unwrapExpression, wrapFunctionExpressionsInParens} from './util';
 
 const EMPTY_MAP = new Map<string, Expression>();
@@ -112,10 +116,42 @@ export const enum ResourceTypeForDiagnostics {
 }
 
 /**
+ * Represents an Angular component.
+ */
+export class ComponentSymbol extends DirectiveSymbol {
+  usedDirectives: SemanticSymbol[] = [];
+  usedPipes: SemanticSymbol[] = [];
+  isRemotelyScoped = false;
+
+  isEmitAffected(previousSymbol: SemanticSymbol, publicApiAffected: Set<SemanticSymbol>): boolean {
+    if (!(previousSymbol instanceof ComponentSymbol)) {
+      return true;
+    }
+
+    // Create an equality function that considers symbols equal if they represent the same
+    // declaration, but only if the symbol in the current compilation does not have its public API
+    // affected.
+    const isSymbolAffected = (current: SemanticSymbol, previous: SemanticSymbol) =>
+        isSymbolEqual(current, previous) && !publicApiAffected.has(current);
+
+    // The emit of a component is affected if either of the following is true:
+    //  1. The component used to be remotely scoped but no longer is, or vice versa.
+    //  2. The list of used directives has changed or any of those directives have had their public
+    //     API changed. If the used directives have been reordered but not otherwise affected then
+    //     the component must still be re-emitted, as this may affect directive instantiation order.
+    //  3. The list of used pipes has changed, or any of those pipes have had their public API
+    //     changed.
+    return this.isRemotelyScoped !== previousSymbol.isRemotelyScoped ||
+        !isArrayEqual(this.usedDirectives, previousSymbol.usedDirectives, isSymbolAffected) ||
+        !isArrayEqual(this.usedPipes, previousSymbol.usedPipes, isSymbolAffected);
+  }
+}
+
+/**
  * `DecoratorHandler` which handles the `@Component` annotation.
  */
 export class ComponentDecoratorHandler implements
-    DecoratorHandler<Decorator, ComponentAnalysisData, ComponentResolutionData> {
+    DecoratorHandler<Decorator, ComponentAnalysisData, ComponentSymbol, ComponentResolutionData> {
   constructor(
       private reflector: ReflectionHost, private evaluator: PartialEvaluator,
       private metaRegistry: MetadataRegistry, private metaReader: MetadataReader,
@@ -131,7 +167,7 @@ export class ComponentDecoratorHandler implements
       private defaultImportRecorder: DefaultImportRecorder,
       private depTracker: DependencyTracker|null,
       private injectableRegistry: InjectableClassRegistry,
-      private componentResolutionRegistry: ComponentResolutionRegistry,
+      private semanticDepGraphUpdater: SemanticDepGraphUpdater|null,
       private annotateForClosureCompiler: boolean) {}
 
   private literalCache = new Map<Decorator, ts.ObjectLiteralExpression>();
@@ -398,6 +434,12 @@ export class ComponentDecoratorHandler implements
     return output;
   }
 
+  symbol(node: ClassDeclaration, analysis: Readonly<ComponentAnalysisData>): ComponentSymbol {
+    return new ComponentSymbol(
+        node, analysis.meta.selector, analysis.inputs.propertyNames, analysis.outputs.propertyNames,
+        analysis.meta.exportAs);
+  }
+
   register(node: ClassDeclaration, analysis: ComponentAnalysisData): void {
     // Register this component's information with the `MetadataRegistry`. This ensures that
     // the information about the component is available during the compile() phase.
@@ -477,8 +519,9 @@ export class ComponentDecoratorHandler implements
         meta.template.sourceMapping, meta.template.file, meta.template.errors);
   }
 
-  resolve(node: ClassDeclaration, analysis: Readonly<ComponentAnalysisData>):
-      ResolveResult<ComponentResolutionData> {
+  resolve(
+      node: ClassDeclaration, analysis: Readonly<ComponentAnalysisData>,
+      symbol: ComponentSymbol): ResolveResult<ComponentResolutionData> {
     if (analysis.isPoisoned && !this.usePoisonedData) {
       return {};
     }
@@ -551,7 +594,6 @@ export class ComponentDecoratorHandler implements
           isComponent: directive.isComponent,
         };
       });
-
       type UsedPipe = {ref: Reference<ClassDeclaration>, pipeName: string, expression: Expression};
       const usedPipes: UsedPipe[] = [];
       for (const pipeName of bound.getUsedPipes()) {
@@ -564,6 +606,12 @@ export class ComponentDecoratorHandler implements
           pipeName,
           expression: this.refEmitter.emit(pipe, context),
         });
+      }
+      if (this.semanticDepGraphUpdater !== null) {
+        symbol.usedDirectives =
+            usedDirectives.map(dir => this.semanticDepGraphUpdater!.getSymbol(dir.ref.node));
+        symbol.usedPipes =
+            usedPipes.map(pipe => this.semanticDepGraphUpdater!.getSymbol(pipe.ref.node));
       }
 
       // Scan through the directives/pipes actually used in the template and check whether any
@@ -615,6 +663,18 @@ export class ComponentDecoratorHandler implements
           // NgModule file will take care of setting the directives for the component.
           this.scopeRegistry.setComponentRemoteScope(
               node, usedDirectives.map(dir => dir.ref), usedPipes.map(pipe => pipe.ref));
+          symbol.isRemotelyScoped = true;
+
+          if (this.semanticDepGraphUpdater !== null) {
+            const moduleSymbol = this.semanticDepGraphUpdater.getSymbol(scope.ngModule);
+            if (!(moduleSymbol instanceof NgModuleSymbol)) {
+              throw new Error(
+                  `AssertionError: Expected ${scope.ngModule.name} to be an NgModuleSymbol.`);
+            }
+
+            moduleSymbol.addRemotelyScopedComponent(
+                symbol, symbol.usedDirectives, symbol.usedPipes);
+          }
         } else {
           // We are not able to handle this cycle so throw an error.
           const relatedMessages: ts.DiagnosticRelatedInformation[] = [];
@@ -632,10 +692,6 @@ export class ComponentDecoratorHandler implements
               relatedMessages);
         }
       }
-
-      this.componentResolutionRegistry.register(
-          node, usedDirectives.map(dir => dir.ref.node), usedPipes.map(pipe => pipe.ref.node),
-          cycleDetected);
     }
 
     const diagnostics: ts.Diagnostic[] = [];

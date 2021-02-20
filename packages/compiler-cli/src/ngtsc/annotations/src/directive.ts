@@ -11,9 +11,12 @@ import {emitDistinctChangesOnlyDefaultValue} from '@angular/compiler/src/core';
 import * as ts from 'typescript';
 
 import {ErrorCode, FatalDiagnosticError} from '../../diagnostics';
+import {absoluteFromSourceFile} from '../../file_system';
 import {DefaultImportRecorder, Reference} from '../../imports';
 import {ClassPropertyMapping, DirectiveTypeCheckMeta, InjectableClassRegistry, MetadataReader, MetadataRegistry} from '../../metadata';
 import {extractDirectiveTypeCheckMeta} from '../../metadata/src/util';
+import {SemanticSymbol} from '../../ngmodule_semantics/src/api';
+import {isArrayEqual} from '../../ngmodule_semantics/src/util';
 import {DynamicValue, EnumValue, PartialEvaluator} from '../../partial_evaluator';
 import {ClassDeclaration, ClassMember, ClassMemberKind, Decorator, filterToMembersWithDecorator, ReflectionHost, reflectObjectLiteral} from '../../reflection';
 import {LocalModuleScopeRegistry} from '../../scope';
@@ -46,8 +49,40 @@ export interface DirectiveHandlerData {
   isStructural: boolean;
 }
 
+/**
+ * Represents an Angular directive. Components are represented by `ComponentSymbol`, which inherits
+ * from this symbol.
+ */
+export class DirectiveSymbol extends SemanticSymbol {
+  constructor(
+      decl: ClassDeclaration, public readonly selector: string|null,
+      public readonly inputs: string[], public readonly outputs: string[],
+      public readonly exportAs: string[]|null) {
+    super(decl);
+  }
+
+  isPublicApiAffected(previousSymbol: SemanticSymbol): boolean {
+    // Note: since components and directives have exactly the same items contributing to their
+    // public API, it is okay for a directive to change into a component and vice versa without
+    // the API being affected.
+    if (!(previousSymbol instanceof DirectiveSymbol)) {
+      return true;
+    }
+
+    // Directives and components have a public API of:
+    //  1. Their selector.
+    //  2. The binding names of their inputs and outputs; a change in ordering is also considered
+    //     to be a change in public API.
+    //  3. The list of exportAs names and its ordering.
+    return this.selector !== previousSymbol.selector ||
+        !isArrayEqual(this.inputs, previousSymbol.inputs) ||
+        !isArrayEqual(this.outputs, previousSymbol.outputs) ||
+        !isArrayEqual(this.exportAs, previousSymbol.exportAs);
+  }
+}
+
 export class DirectiveDecoratorHandler implements
-    DecoratorHandler<Decorator|null, DirectiveHandlerData, unknown> {
+    DecoratorHandler<Decorator|null, DirectiveHandlerData, DirectiveSymbol, unknown> {
   constructor(
       private reflector: ReflectionHost, private evaluator: PartialEvaluator,
       private metaRegistry: MetadataRegistry, private scopeRegistry: LocalModuleScopeRegistry,
@@ -170,6 +205,12 @@ export class DirectiveDecoratorHandler implements
       resolution: Readonly<unknown>): CompileResult[] {
     const def = compileDeclareDirectiveFromMetadata(analysis.meta);
     return this.compileDirective(analysis, def);
+  }
+
+  symbol(node: ClassDeclaration, analysis: Readonly<DirectiveHandlerData>): DirectiveSymbol {
+    return new DirectiveSymbol(
+        node, analysis.meta.selector, analysis.inputs.propertyNames, analysis.outputs.propertyNames,
+        analysis.meta.exportAs);
   }
 
   private compileDirective(
