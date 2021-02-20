@@ -717,6 +717,83 @@ runInEachFileSystem(() => {
         ]);
       });
 
+      xit('should recompile components when the name by which they are exported changes (2)',
+          () => {
+            env.write('cmp-user.ts', `
+          import {Component} from '@angular/core';
+
+          @Component({
+            selector: 'cmp-user',
+            template: '<cmp-dep></cmp-dep>',
+          })
+          export class CmpUser {}
+        `);
+            env.write('cmp-dep.ts', `
+          import {Component} from '@angular/core';
+
+          export {CmpDep as CmpDepExport};
+
+          @Component({
+            selector: 'cmp-dep',
+            template: 'Dep',
+          })
+          export class CmpDep {}
+        `);
+            env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {CmpDepExport} from './cmp-dep';
+
+          @NgModule({
+            declarations: [CmpUser, CmpDepExport]
+          })
+          export class Module {}
+        `);
+
+            env.driveMain();
+
+            // Verify that the reference emitter used the export of `CmpDep` that appeared first in
+            // the source, i.e. `CmpDepExport`.
+            const userCmpJs = env.getContents('cmp-user.js');
+            expect(userCmpJs).toContain('CmpDepExport');
+
+            env.write('cmp-dep.ts', `
+          import {Component} from '@angular/core';
+
+          export {CmpDep as CmpDepExport2};
+
+          @Component({
+            selector: 'cmp-dep',
+            template: 'Dep',
+          })
+          export class CmpDep {}
+        `);
+            env.write('module.ts', `
+          import {NgModule} from '@angular/core';
+          import {CmpUser} from './cmp-user';
+          import {CmpDepExport2} from './cmp-dep';
+
+          @NgModule({
+            declarations: [CmpUser, CmpDepExport2]
+          })
+          export class Module {}
+        `);
+
+            env.flushWrittenFileTracking();
+            env.driveMain();
+
+            expectToHaveWritten([
+              // CmpDep and its module were directly updated.
+              '/cmp-dep.js',
+              '/module.js',
+
+              // CmpUser required a re-emit because it was previous emitted as `CmpDepExport`, but
+              // that export has since been renamed.
+              '/cmp-user.js',
+            ]);
+          });
+
+
       it('should not recompile components when a directive is changed into a component', () => {
         env.write('cmp-user.ts', `
           import {Component} from '@angular/core';

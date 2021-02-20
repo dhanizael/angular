@@ -87,6 +87,13 @@ function getSymbolIdentifier(decl: ClassDeclaration): string|null {
     // to use its new exported name. The semantic dependency graph would be unaware of this rename
     // however, hence non-exported declarations are excluded from semantic tracking by not assigning
     // them a unique identifier.
+    //
+    // This relies on the assumption that the reference emitter prefers the direct export of the
+    // declaration. This is currently not the case however; the reference emitter chooses the first
+    // export in the source file that corresponds with the reference. As such, if a class is itself
+    // exported _and_ a secondary export of the class appears above it, renaming that secondary
+    // export would not currently trigger re-emit of any symbols that refer to the declaration by
+    // its previous name.
     return null;
   }
 
