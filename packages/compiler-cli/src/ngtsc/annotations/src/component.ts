@@ -16,8 +16,8 @@ import {DefaultImportRecorder, ModuleResolver, Reference, ReferenceEmitter} from
 import {DependencyTracker} from '../../incremental/api';
 import {IndexingContext} from '../../indexer';
 import {ClassPropertyMapping, ComponentResources, DirectiveMeta, DirectiveTypeCheckMeta, extractDirectiveTypeCheckMeta, InjectableClassRegistry, MetadataReader, MetadataRegistry, Resource, ResourceRegistry} from '../../metadata';
-import {SemanticDepGraphUpdater, SemanticSymbol} from '../../ngmodule_semantics';
-import {isArrayEqual, isSymbolEqual} from '../../ngmodule_semantics/src/util';
+import {SemanticDepGraphUpdater, SemanticReference, SemanticSymbol} from '../../ngmodule_semantics';
+import {isArrayEqual, isImportPathEqual, isSymbolEqual} from '../../ngmodule_semantics/src/util';
 import {EnumValue, PartialEvaluator, ResolvedValue} from '../../partial_evaluator';
 import {ClassDeclaration, DeclarationNode, Decorator, ReflectionHost, reflectObjectLiteral} from '../../reflection';
 import {ComponentScopeReader, LocalModuleScopeRegistry, TypeCheckScopeRegistry} from '../../scope';
@@ -118,8 +118,8 @@ export const enum ResourceTypeForDiagnostics {
  * Represents an Angular component.
  */
 export class ComponentSymbol extends DirectiveSymbol {
-  usedDirectives: SemanticSymbol[] = [];
-  usedPipes: SemanticSymbol[] = [];
+  usedDirectives: SemanticReference[] = [];
+  usedPipes: SemanticReference[] = [];
   isRemotelyScoped = false;
 
   isEmitAffected(previousSymbol: SemanticSymbol, publicApiAffected: Set<SemanticSymbol>): boolean {
@@ -130,8 +130,10 @@ export class ComponentSymbol extends DirectiveSymbol {
     // Create an equality function that considers symbols equal if they represent the same
     // declaration, but only if the symbol in the current compilation does not have its public API
     // affected.
-    const isSymbolAffected = (current: SemanticSymbol, previous: SemanticSymbol) =>
-        isSymbolEqual(current, previous) && !publicApiAffected.has(current);
+    const isSymbolAffected = (current: SemanticReference, previous: SemanticReference) =>
+        isSymbolEqual(current.symbol, previous.symbol) &&
+        isImportPathEqual(current.importPath, previous.importPath) &&
+        !publicApiAffected.has(current.symbol);
 
     // The emit of a component is affected if either of the following is true:
     //  1. The component used to be remotely scoped but no longer is, or vice versa.
@@ -607,10 +609,11 @@ export class ComponentDecoratorHandler implements
         });
       }
       if (this.semanticDepGraphUpdater !== null) {
-        symbol.usedDirectives =
-            usedDirectives.map(dir => this.semanticDepGraphUpdater!.getSymbol(dir.ref.node));
-        symbol.usedPipes =
-            usedPipes.map(pipe => this.semanticDepGraphUpdater!.getSymbol(pipe.ref.node));
+        symbol.usedDirectives = usedDirectives.map(
+            dir => this.semanticDepGraphUpdater!.getSemanticReference(dir.ref.node, dir.type));
+        symbol.usedPipes = usedPipes.map(
+            pipe =>
+                this.semanticDepGraphUpdater!.getSemanticReference(pipe.ref.node, pipe.expression));
       }
 
       // Scan through the directives/pipes actually used in the template and check whether any

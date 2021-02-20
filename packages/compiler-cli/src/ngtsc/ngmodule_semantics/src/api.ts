@@ -10,6 +10,16 @@ import * as ts from 'typescript';
 import {absoluteFromSourceFile, AbsoluteFsPath} from '../../file_system';
 import {ClassDeclaration} from '../../reflection';
 
+export interface SemanticReference {
+  symbol: SemanticSymbol;
+
+  /**
+   * The name by which the symbol has been referenced. This may differ from the symbols own name due
+   * to exports.
+   */
+  importPath: string|null;
+}
+
 /**
  * Represents a symbol that is recognizable across incremental rebuilds, which enables the captured
  * metadata to be compared to the prior compilation. This allows for semantic understanding of
@@ -77,33 +87,8 @@ function getSymbolIdentifier(decl: ClassDeclaration): string|null {
     return null;
   }
 
-  if (!hasExportModifier(decl)) {
-    // If the declaration is not itself exported, then it is still possible for the declaration
-    // to be exported elsewhere, possibly using a different exported name. Therefore, we cannot
-    // consider the declaration's own name as its unique identifier.
-    //
-    // For example, renaming the name by which this declaration is exported without renaming the
-    // class declaration itself requires that any references to the declarations must be re-emitted
-    // to use its new exported name. The semantic dependency graph would be unaware of this rename
-    // however, hence non-exported declarations are excluded from semantic tracking by not assigning
-    // them a unique identifier.
-    //
-    // This relies on the assumption that the reference emitter prefers the direct export of the
-    // declaration. This is currently not the case however; the reference emitter chooses the first
-    // export in the source file that corresponds with the reference. As such, if a class is itself
-    // exported _and_ a secondary export of the class appears above it, renaming that secondary
-    // export would not currently trigger re-emit of any symbols that refer to the declaration by
-    // its previous name.
-    return null;
-  }
-
   // If this is a top-level class declaration, the class name is used as unique identifier.
   // Other scenarios are currently not supported and causes the symbol not to be identified
   // across rebuilds, unless the declaration node has not changed.
   return decl.name.text;
-}
-
-function hasExportModifier(decl: ClassDeclaration): boolean {
-  return decl.modifiers !== undefined &&
-      decl.modifiers.some(mod => mod.kind === ts.SyntaxKind.ExportKeyword);
 }

@@ -24,6 +24,18 @@ export function isSymbolEqual(a: SemanticSymbol, b: SemanticSymbol): boolean {
   return a.path === b.path && a.identifier === b.identifier;
 }
 
+export function isImportPathEqual(a: string|null, b: string|null): boolean {
+  if (a === null || b === null) {
+    // TODO: is considering null import paths as different a problem for local references which
+    //  won't have an import path and would therefore always be considered different? I don't think
+    //  so, but it's not clear cut. Perhaps this would be better if we track and compare the actual
+    //  Expression.
+    return false;
+  }
+
+  return a === b;
+}
+
 export function referenceEquality<T>(a: T, b: T): boolean {
   return a === b;
 }

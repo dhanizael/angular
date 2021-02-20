@@ -8,6 +8,7 @@ ts_library(
         "src/**/*.ts",
     ]),
     deps = [
+        "//packages/compiler",
         "//packages/compiler-cli/src/ngtsc/file_system",
         "//packages/compiler-cli/src/ngtsc/incremental:api",
         "//packages/compiler-cli/src/ngtsc/metadata",
